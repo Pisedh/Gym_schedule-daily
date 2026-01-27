@@ -1,0 +1,41 @@
+name: Build and Deploy Vue to FTP
+
+on:
+  push:
+    branches:
+      - workflow # Changed to match your current branch name
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24' # Using stable v22 for 2026
+          cache: 'npm'
+          # Tell the cache to look in the subfolder
+          cache-dependency-path: gymschedule/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: ./gymschedule
+        run: npm ci
+
+      - name: 🏗 Build project
+        working-directory: ./gymschedule
+        run: npm run build
+
+      - name: 🚀 Sync files to FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # Path to the build output inside the subfolder
+          local-dir: ./gymschedule/dist/ 
+          server-dir: /htdocs/ 
+          protocol: ftp
