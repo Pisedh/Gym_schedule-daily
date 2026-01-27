@@ -3,7 +3,7 @@ name: Build and Deploy Vue to FTP
 on:
   push:
     branches:
-      - workflow # Changed to match your current branch name
+      - main # Changed to match your current branch name
 
 jobs:
   build-and-deploy:
