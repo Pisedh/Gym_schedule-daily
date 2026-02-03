@@ -21,13 +21,18 @@ const library = {
   'Arms': ['Barbell Curl', 'Tricep Pushdown', 'Hammer Curls', 'Skullcrushers']
 };
 
+// Fixed: Ensured AudioContext resumes correctly based on modern browser policies
 const playSound = (type) => {
-  const audio = new (window.AudioContext || window.webkitAudioContext)();
-  const osc = audio.createOscillator();
-  const gain = audio.createGain();
-  const now = audio.currentTime;
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const now = audioCtx.currentTime;
   osc.connect(gain);
-  gain.connect(audio.destination);
+  gain.connect(audioCtx.destination);
+  
   if (type === 'click') {
     osc.frequency.setValueAtTime(800, now);
     gain.gain.setValueAtTime(0.05, now);
@@ -133,13 +138,9 @@ const heatmapDays = computed(() => {
   return days;
 });
 
-// --- NEW HISTORY CATEGORY LOGIC ---
 const historyCategory = ref('All');
-
-// Generate available categories dynamically + 'All' and 'Mixed'
 const availableCategories = computed(() => ['All', ...Object.keys(library), 'Mixed']);
 
-// Auto-tag workouts with their primary muscle group
 const enrichedHistory = computed(() => {
   if (!currentUser.value) return [];
   return currentUser.value.history.map(h => {
@@ -149,13 +150,11 @@ const enrichedHistory = computed(() => {
         if (list.includes(ex.name)) counts[cat] = (counts[cat] || 0) + 1;
       });
     });
-    // Find the category with the most exercises in this workout
     const primaryCat = Object.entries(counts).sort((a,b) => b[1] - a[1])[0]?.[0] || 'Mixed';
     return { ...h, primaryCat };
   });
 });
 
-// Filter the history based on the selected tab
 const filteredHistory = computed(() => {
   if (historyCategory.value === 'All') return enrichedHistory.value;
   return enrichedHistory.value.filter(h => h.primaryCat === historyCategory.value);
@@ -248,6 +247,32 @@ const filteredHistory = computed(() => {
 </template>
 
 <style scoped>
+/* --- FIXED: Added missing CSS Root Variables --- */
+:root {
+  --bg: #030712;
+  --surface: #111827;
+  --surface-highlight: #1f2937;
+  --border: #374151;
+  --text: #f9fafb;
+  --text-dim: #9ca3af;
+  --primary: #8b5cf6;
+  --primary-glow: rgba(139, 92, 246, 0.4);
+  --accent: #06b6d4;
+  --success: #10b981;
+  --danger: #ef4444;
+}
+
+/* --- FIXED: Added missing Vue Transition Classes --- */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.pop-enter-active, .pop-leave-active { transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.pop-enter-from, .pop-leave-to { transform: scale(0.8); opacity: 0; }
+
+.scale-enter-active, .scale-leave-active { transition: all 0.2s ease; }
+.scale-enter-from, .scale-leave-to { transform: scale(0.9); opacity: 0; }
+
+/* Original Styles */
 .dashboard-wrapper { display: flex; height: 100vh; width: 100vw; background: var(--bg); color: var(--text); }
 .cyber-dock { width: 80px; height: 100vh; background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(20px); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 10; }
 .dock-logo { font-size: 24px; margin-bottom: 40px; text-shadow: 0 0 10px var(--accent); }
@@ -315,7 +340,6 @@ const filteredHistory = computed(() => {
 .level-up-overlay h1 { font-size: 4rem; background: linear-gradient(to right, var(--primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: zoom 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .level-badge { width: 150px; height: 150px; border-radius: 50%; border: 10px solid var(--text); display: grid; place-items: center; font-size: 4rem; font-weight: 900; background: var(--primary); box-shadow: 0 0 100px var(--primary); }
 
-/* --- CATEGORY HISTORY STYLES --- */
 .category-tabs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px; scrollbar-width: none; }
 .category-tabs::-webkit-scrollbar { display: none; }
 .category-tabs button { flex-shrink: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim); padding: 8px 16px; border-radius: 50px; font-weight: 600; cursor: pointer; transition: 0.3s; }
@@ -342,5 +366,12 @@ const filteredHistory = computed(() => {
 @keyframes pulse-nav { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 @keyframes zoom { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 
-@media (max-width: 768px) { .cyber-shell { flex-direction: column-reverse; } .cyber-dock { width: 100%; height: 70px; flex-direction: row; justify-content: space-evenly; border-right: none; border-top: 1px solid var(--border); padding: 0; } .dock-logo { display: none; } .cyber-dock button { width: auto; height: 100%; flex: 1; border-radius: 0; margin: 0; } .bento-grid { grid-template-columns: 1fr 1fr; } }
+/* --- FIXED: Corrected '.cyber-shell' to '.dashboard-wrapper' for responsiveness --- */
+@media (max-width: 768px) { 
+  .dashboard-wrapper { flex-direction: column-reverse; } 
+  .cyber-dock { width: 100%; height: 70px; flex-direction: row; justify-content: space-evenly; border-right: none; border-top: 1px solid var(--border); padding: 0; } 
+  .dock-logo { display: none; } 
+  .cyber-dock button { width: auto; height: 100%; flex: 1; border-radius: 0; margin: 0; } 
+  .bento-grid { grid-template-columns: 1fr 1fr; } 
+}
 </style>
