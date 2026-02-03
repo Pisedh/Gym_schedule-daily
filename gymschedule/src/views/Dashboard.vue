@@ -132,6 +132,34 @@ const heatmapDays = computed(() => {
   }
   return days;
 });
+
+// --- NEW HISTORY CATEGORY LOGIC ---
+const historyCategory = ref('All');
+
+// Generate available categories dynamically + 'All' and 'Mixed'
+const availableCategories = computed(() => ['All', ...Object.keys(library), 'Mixed']);
+
+// Auto-tag workouts with their primary muscle group
+const enrichedHistory = computed(() => {
+  if (!currentUser.value) return [];
+  return currentUser.value.history.map(h => {
+    const counts = {};
+    h.exercises.forEach(ex => {
+      Object.entries(library).forEach(([cat, list]) => {
+        if (list.includes(ex.name)) counts[cat] = (counts[cat] || 0) + 1;
+      });
+    });
+    // Find the category with the most exercises in this workout
+    const primaryCat = Object.entries(counts).sort((a,b) => b[1] - a[1])[0]?.[0] || 'Mixed';
+    return { ...h, primaryCat };
+  });
+});
+
+// Filter the history based on the selected tab
+const filteredHistory = computed(() => {
+  if (historyCategory.value === 'All') return enrichedHistory.value;
+  return enrichedHistory.value.filter(h => h.primaryCat === historyCategory.value);
+});
 </script>
 
 <template>
@@ -173,9 +201,44 @@ const heatmapDays = computed(() => {
         </div>
 
         <div v-else-if="view === 'journey'" class="journey-view">
-          <h2>Training Logs</h2>
-          <div v-if="currentUser.history.length === 0" class="empty-state">No Data Recorded.</div>
-          <div class="log-feed"><div v-for="h in currentUser.history" :key="h.id" class="log-card"><div class="log-head"><span class="date">{{ new Date(h.date).toLocaleDateString() }}</span><span class="vol">Vol: {{ h.volume }}kg</span></div><div class="log-body"><span class="ex-chip" v-for="ex in h.exercises" :key="ex.id">{{ ex.name }}</span></div></div></div>
+          <div class="header-row">
+            <h2>Training Logs</h2>
+          </div>
+
+          <div class="category-tabs">
+            <button 
+              v-for="cat in availableCategories" 
+              :key="cat"
+              :class="{ active: historyCategory === cat }"
+              @click="historyCategory = cat"
+            >
+              {{ cat }}
+            </button>
+          </div>
+
+          <div v-if="filteredHistory.length === 0" class="empty-state">
+            <p>No records found for {{ historyCategory }}.</p>
+          </div>
+
+          <div class="log-grid">
+            <div v-for="h in filteredHistory" :key="h.id" class="log-card-pro">
+              <div class="log-header-pro">
+                <span class="log-cat-badge" :class="h.primaryCat.toLowerCase()">{{ h.primaryCat }}</span>
+                <span class="log-date">{{ new Date(h.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }}</span>
+              </div>
+              
+              <div class="log-stats">
+                <div class="stat"><span class="lbl">Volume</span><span class="val">{{ h.volume }} kg</span></div>
+                <div class="stat"><span class="lbl">Time</span><span class="val">{{ formatTime(h.duration) }}</span></div>
+                <div class="stat"><span class="lbl">Movements</span><span class="val">{{ h.exercises.length }}</span></div>
+              </div>
+
+              <div class="log-exercises">
+                <span v-for="ex in h.exercises.slice(0, 3)" :key="ex.id" class="ex-tag">{{ ex.name }}</span>
+                <span v-if="h.exercises.length > 3" class="ex-tag more">+{{ h.exercises.length - 3 }} more</span>
+              </div>
+            </div>
+          </div>
         </div>
       </Transition>
     </main>
@@ -185,8 +248,7 @@ const heatmapDays = computed(() => {
 </template>
 
 <style scoped>
-.dashboard-wrapper { display: flex; height: 100vh; width: 100vw; }
-/* Reused styles from previous steps */
+.dashboard-wrapper { display: flex; height: 100vh; width: 100vw; background: var(--bg); color: var(--text); }
 .cyber-dock { width: 80px; height: 100vh; background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(20px); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 10; }
 .dock-logo { font-size: 24px; margin-bottom: 40px; text-shadow: 0 0 10px var(--accent); }
 .cyber-dock button { background: transparent; border: none; color: var(--text-dim); width: 60px; height: 60px; border-radius: 16px; margin-bottom: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: 0.3s; }
@@ -224,9 +286,9 @@ const heatmapDays = computed(() => {
 .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .neon-btn { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 50px; font-weight: 600; cursor: pointer; box-shadow: 0 0 15px var(--primary-glow); }
 .empty-state { text-align: center; margin-top: 100px; opacity: 0.5; }
-.queue-list, .log-feed { display: flex; flex-direction: column; gap: 10px; }
-.ex-card, .log-card { background: var(--surface); border: 1px solid var(--border); padding: 15px; border-radius: 16px; }
-.ex-header, .log-head { display: flex; justify-content: space-between; align-items: center; }
+.queue-list { display: flex; flex-direction: column; gap: 10px; }
+.ex-card { background: var(--surface); border: 1px solid var(--border); padding: 15px; border-radius: 16px; }
+.ex-header { display: flex; justify-content: space-between; align-items: center; }
 .del { background: transparent; border: 1px solid var(--border); color: #ef4444; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; }
 .launch-btn { position: fixed; bottom: 30px; right: 30px; background: var(--success); color: #000; padding: 15px 40px; border-radius: 50px; font-weight: 800; border: none; font-size: 1.1rem; cursor: pointer; box-shadow: 0 0 20px rgba(16,185,129,0.4); animation: float 3s infinite ease-in-out; }
 .active-view { max-width: 600px; margin: 0 auto; padding-bottom: 100px; }
@@ -249,10 +311,36 @@ const heatmapDays = computed(() => {
 .cat-col { margin-bottom: 20px; }
 .btn-group { display: flex; flex-wrap: wrap; gap: 10px; }
 .btn-group button { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-.log-head { color: var(--primary); font-weight: 700; margin-bottom: 8px; }
-.ex-chip { display: inline-block; font-size: 0.75rem; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; margin-right: 5px; margin-bottom: 5px; }
 .level-up-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
 .level-up-overlay h1 { font-size: 4rem; background: linear-gradient(to right, var(--primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: zoom 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .level-badge { width: 150px; height: 150px; border-radius: 50%; border: 10px solid var(--text); display: grid; place-items: center; font-size: 4rem; font-weight: 900; background: var(--primary); box-shadow: 0 0 100px var(--primary); }
+
+/* --- CATEGORY HISTORY STYLES --- */
+.category-tabs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px; scrollbar-width: none; }
+.category-tabs::-webkit-scrollbar { display: none; }
+.category-tabs button { flex-shrink: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim); padding: 8px 16px; border-radius: 50px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+.category-tabs button.active { background: var(--surface-highlight); color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(6, 182, 212, 0.2); }
+
+.log-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; padding-bottom: 40px; }
+.log-card-pro { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 15px; transition: transform 0.2s, box-shadow 0.2s; }
+.log-card-pro:hover { transform: translateY(-3px); box-shadow: 0 5px 20px rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.1); }
+
+.log-header-pro { display: flex; justify-content: space-between; align-items: center; }
+.log-cat-badge { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px; }
+.log-date { font-size: 0.85rem; color: var(--text-dim); }
+
+.log-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px; }
+.stat { display: flex; flex-direction: column; align-items: center; }
+.stat .lbl { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; margin-bottom: 4px; }
+.stat .val { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+
+.log-exercises { display: flex; flex-wrap: wrap; gap: 6px; }
+.ex-tag { font-size: 0.75rem; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 6px; color: var(--text-dim); }
+.ex-tag.more { background: transparent; border: 1px dashed var(--text-dim); }
+
+@keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+@keyframes pulse-nav { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+@keyframes zoom { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
 @media (max-width: 768px) { .cyber-shell { flex-direction: column-reverse; } .cyber-dock { width: 100%; height: 70px; flex-direction: row; justify-content: space-evenly; border-right: none; border-top: 1px solid var(--border); padding: 0; } .dock-logo { display: none; } .cyber-dock button { width: auto; height: 100%; flex: 1; border-radius: 0; margin: 0; } .bento-grid { grid-template-columns: 1fr 1fr; } }
 </style>
